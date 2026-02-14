@@ -1,0 +1,949 @@
+Here's the full updated code with Firebase wired in — logs save to your Realtime Database in real time, visible from any device:
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>For Eberechi 💕</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,700;1,400&family=Cormorant+Garamond:ital,wght@0,300;0,400;1,300;1,400&family=Lato:wght@300;400&display=swap');
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  :root {
+    --red: #c0392b;
+    --deep-red: #7b0d1e;
+    --rose: #e8a0b0;
+    --blush: #f7c5d0;
+    --gold: #d4a853;
+    --dark: #0a0005;
+  }
+
+  body {
+    font-family: 'Lato', sans-serif;
+    background: var(--dark);
+    color: #fff;
+    min-height: 100vh;
+    overflow-x: hidden;
+  }
+
+  /* ===== MUSIC OVERLAY ===== */
+  #music-overlay {
+    position: fixed;
+    inset: 0;
+    z-index: 9999;
+    background: radial-gradient(ellipse at center, #3d0015 0%, #1a0008 50%, #0a0005 100%);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+    padding: 2rem;
+    transition: opacity 0.8s ease;
+  }
+  #music-overlay.fade-out { opacity: 0; pointer-events: none; }
+  .overlay-heart {
+    font-size: 4rem;
+    animation: heartBeat 1.4s ease-in-out infinite;
+    margin-bottom: 1.5rem;
+  }
+  @keyframes heartBeat {
+    0%, 100% { transform: scale(1); }
+    14%       { transform: scale(1.2); }
+    28%       { transform: scale(1); }
+    42%       { transform: scale(1.15); }
+    70%       { transform: scale(1); }
+  }
+  .overlay-btn {
+    background: linear-gradient(135deg, #c0392b, #8e0e30);
+    color: #fff;
+    border: none;
+    border-radius: 50px;
+    padding: 1rem 2.5rem;
+    font-family: 'Lato', sans-serif;
+    font-size: 1.05rem;
+    letter-spacing: 0.08em;
+    cursor: pointer;
+    box-shadow: 0 4px 30px rgba(192,57,43,0.5);
+    transition: all 0.3s ease;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+  }
+  .overlay-btn:hover { transform: translateY(-3px) scale(1.05); box-shadow: 0 8px 40px rgba(192,57,43,0.7); }
+  .note-float { display: inline-block; animation: noteFloat 1.2s ease-in-out infinite; }
+  @keyframes noteFloat {
+    0%, 100% { transform: translateY(0); }
+    50%       { transform: translateY(-5px); }
+  }
+
+  /* ===== FLOATING HEARTS BG ===== */
+  #hearts-bg {
+    position: fixed; top: 0; left: 0;
+    width: 100%; height: 100%;
+    pointer-events: none; z-index: 0; overflow: hidden;
+  }
+  .bg-heart {
+    position: absolute; bottom: -60px; opacity: 0;
+    animation: floatUp linear infinite;
+  }
+  @keyframes floatUp {
+    0%   { transform: translateY(0) rotate(0deg); opacity: 0; }
+    10%  { opacity: 0.35; }
+    90%  { opacity: 0.15; }
+    100% { transform: translateY(-110vh) rotate(30deg); opacity: 0; }
+  }
+
+  /* ===== SCREENS ===== */
+  .screen {
+    position: relative; z-index: 1;
+    min-height: 100vh;
+    display: flex; flex-direction: column;
+    align-items: center; justify-content: center;
+    padding: 2rem 1.5rem; text-align: center;
+    opacity: 0; transform: translateY(20px);
+    transition: opacity 0.8s ease, transform 0.8s ease;
+    pointer-events: none;
+  }
+  .screen.active  { opacity: 1; transform: translateY(0); pointer-events: all; }
+  .screen.hidden  { display: none; }
+
+  #screen-landing  { background: radial-gradient(ellipse at center, #3d0015 0%, #1a0008 50%, #0a0005 100%); }
+  #screen-question { background: radial-gradient(ellipse at 50% 40%, #2d0010 0%, #0f0005 60%, #0a0005 100%); }
+  #screen-wait     { background: radial-gradient(ellipse at center, #1a0a00 0%, #0a0005 100%); }
+  #screen-please   { background: radial-gradient(ellipse at center, #1a0020 0%, #0a0005 100%); }
+  #screen-yes      { background: radial-gradient(ellipse at center, #1a0025 0%, #050010 100%); }
+  #screen-memory   { background: radial-gradient(ellipse at 50% 30%, #1a0015 0%, #0a0005 100%); }
+  #screen-hearts   { background: radial-gradient(ellipse at center, #150020 0%, #0a0005 100%); }
+  #screen-final    { background: radial-gradient(ellipse at center, #0d0020 0%, #050010 70%, #0a0005 100%); }
+
+  /* ===== TYPOGRAPHY ===== */
+  h1 {
+    font-family: 'Playfair Display', serif;
+    font-size: clamp(2rem, 6vw, 4rem);
+    line-height: 1.25; margin-bottom: 1rem; color: #fff;
+    text-shadow: 0 0 40px rgba(200,80,100,0.5);
+  }
+  h2 {
+    font-family: 'Playfair Display', serif;
+    font-size: clamp(1.5rem, 4vw, 2.5rem);
+    margin-bottom: 1.5rem; color: var(--blush);
+  }
+  .subtitle {
+    font-family: 'Cormorant Garamond', serif;
+    font-style: italic;
+    font-size: clamp(1rem, 2.5vw, 1.3rem);
+    color: var(--rose); margin-bottom: 2.5rem; opacity: 0.85;
+  }
+  .body-text {
+    font-family: 'Cormorant Garamond', serif;
+    font-size: clamp(1rem, 2vw, 1.22rem);
+    line-height: 1.9; max-width: 620px;
+    color: rgba(255,220,225,0.9); margin-bottom: 1.5rem;
+  }
+  .name-highlight {
+    font-style: italic; color: var(--gold);
+    text-shadow: 0 0 20px rgba(212,168,83,0.5);
+  }
+  .divider {
+    width: 80px; height: 1px;
+    background: linear-gradient(90deg, transparent, var(--rose), transparent);
+    margin: 1.2rem auto;
+  }
+  .screen-inner { max-width: 700px; width: 100%; z-index: 1; }
+
+  /* ===== BUTTONS ===== */
+  .btn {
+    display: inline-flex; align-items: center; gap: 0.5rem;
+    padding: 0.85rem 2.2rem; border: none; border-radius: 50px;
+    font-family: 'Lato', sans-serif; font-size: 1rem;
+    font-weight: 400; letter-spacing: 0.08em;
+    cursor: pointer; transition: all 0.3s ease;
+  }
+  .btn-primary {
+    background: linear-gradient(135deg, #c0392b, #8e0e30);
+    color: #fff; box-shadow: 0 4px 25px rgba(192,57,43,0.45);
+  }
+  .btn-primary:hover { transform: translateY(-3px) scale(1.04); box-shadow: 0 8px 35px rgba(192,57,43,0.6); }
+  .btn-yes {
+    background: linear-gradient(135deg, #b5005b, #7b003d);
+    color: #fff; box-shadow: 0 4px 25px rgba(181,0,91,0.5);
+    font-size: 1.1rem; padding: 1rem 2.5rem;
+  }
+  .btn-yes:hover { transform: translateY(-4px) scale(1.06); box-shadow: 0 10px 40px rgba(181,0,91,0.65); }
+  .btn-no {
+    background: transparent; color: rgba(255,255,255,0.5);
+    border: 1px solid rgba(255,255,255,0.2);
+    font-size: 0.9rem; padding: 0.7rem 1.8rem;
+    position: relative; transition: transform 0.15s ease, border-color 0.3s, color 0.3s;
+  }
+  .btn-secondary {
+    background: linear-gradient(135deg, #5c0070, #3b0050);
+    color: #fff; box-shadow: 0 4px 20px rgba(92,0,112,0.45);
+  }
+  .btn-secondary:hover { transform: translateY(-3px) scale(1.04); }
+  .btn-row { display: flex; gap: 1.2rem; justify-content: center; flex-wrap: wrap; margin-top: 0.5rem; }
+
+  /* ===== DOTS ===== */
+  .dots { display: inline-flex; gap: 6px; margin: 1rem 0 1.5rem; }
+  .dot {
+    width: 8px; height: 8px; background: var(--rose);
+    border-radius: 50%; animation: pulseDot 1.4s ease-in-out infinite;
+  }
+  .dot:nth-child(2) { animation-delay: 0.2s; }
+  .dot:nth-child(3) { animation-delay: 0.4s; }
+  @keyframes pulseDot {
+    0%, 80%, 100% { transform: scale(0.6); opacity: 0.4; }
+    40%           { transform: scale(1); opacity: 1; }
+  }
+
+  /* ===== TYPEWRITER ===== */
+  .typewriter-text {
+    font-family: 'Cormorant Garamond', serif; font-style: italic;
+    font-size: clamp(1rem, 2vw, 1.2rem); line-height: 2;
+    max-width: 600px; color: rgba(255,220,230,0.9);
+    white-space: pre-line; min-height: 180px; margin: 0 auto;
+  }
+  .cursor {
+    display: inline-block; width: 2px; height: 1.1em;
+    background: var(--rose); margin-left: 2px;
+    animation: blink 1s infinite; vertical-align: text-bottom;
+  }
+  @keyframes blink { 50% { opacity: 0; } }
+
+  /* ===== CONFETTI ===== */
+  .confetti-piece {
+    position: fixed; pointer-events: none; z-index: 999;
+    animation: confettiFall linear forwards;
+  }
+  @keyframes confettiFall {
+    0%   { transform: translateY(-20px) rotate(0deg); opacity: 1; }
+    100% { transform: translateY(110vh) rotate(720deg); opacity: 0; }
+  }
+
+  /* ===== HEART GRID ===== */
+  .hearts-grid {
+    display: flex; flex-wrap: wrap; justify-content: center;
+    gap: 1.2rem; max-width: 580px; margin: 1.5rem auto;
+  }
+  .heart-item {
+    cursor: pointer; position: relative;
+    width: 70px; height: 70px;
+    display: flex; align-items: center; justify-content: center;
+    transition: transform 0.3s ease;
+  }
+  .heart-item:hover { transform: scale(1.2); }
+  .heart-icon {
+    font-size: 2.8rem; display: block;
+    filter: drop-shadow(0 0 8px rgba(200,50,100,0.5));
+    transition: filter 0.3s ease; user-select: none;
+  }
+  .heart-item.opened .heart-icon {
+    filter: drop-shadow(0 0 14px rgba(255,150,180,0.9));
+    animation: heartPop 0.4s ease;
+  }
+  @keyframes heartPop {
+    0%   { transform: scale(1); }
+    40%  { transform: scale(1.4); }
+    70%  { transform: scale(0.9); }
+    100% { transform: scale(1); }
+  }
+  .heart-msg {
+    display: none; position: absolute; bottom: 78px;
+    left: 50%; transform: translateX(-50%);
+    background: rgba(60,0,30,0.94);
+    border: 1px solid rgba(255,150,180,0.3);
+    backdrop-filter: blur(10px); color: var(--blush);
+    font-family: 'Cormorant Garamond', serif; font-style: italic;
+    font-size: 0.88rem; padding: 0.65rem 0.9rem;
+    border-radius: 12px; width: 175px; line-height: 1.5;
+    text-align: center; z-index: 10;
+    box-shadow: 0 4px 20px rgba(0,0,0,0.7); pointer-events: none;
+  }
+  .heart-item.opened .heart-msg { display: block; }
+  .heart-item.done .heart-icon { filter: drop-shadow(0 0 14px rgba(255,150,180,0.9)); }
+
+  /* ===== VIDEO ===== */
+  .video-container {
+    width: 100%; max-width: 460px; border-radius: 18px;
+    overflow: hidden; box-shadow: 0 0 60px rgba(180,0,80,0.4);
+    margin: 1.5rem auto; border: 1px solid rgba(255,150,180,0.2);
+  }
+  .video-container video { width: 100%; display: block; }
+  .final-big {
+    font-family: 'Playfair Display', serif;
+    font-size: clamp(1.6rem, 5vw, 2.8rem);
+    color: var(--blush); text-shadow: 0 0 30px rgba(240,150,180,0.6);
+    margin-top: 1rem;
+  }
+  .glow-ring {
+    position: absolute; width: 300px; height: 300px;
+    border-radius: 50%;
+    background: radial-gradient(circle, rgba(180,0,80,0.15) 0%, transparent 70%);
+    pointer-events: none; animation: pulseRing 4s ease-in-out infinite;
+  }
+  @keyframes pulseRing {
+    0%, 100% { transform: scale(1); opacity: 0.5; }
+    50%       { transform: scale(1.3); opacity: 1; }
+  }
+
+  /* ===== MUSIC INDICATOR ===== */
+  #music-indicator {
+    position: fixed; top: 1rem; right: 1rem; z-index: 1000;
+    background: rgba(180,0,80,0.25);
+    border: 1px solid rgba(255,150,180,0.25);
+    backdrop-filter: blur(8px); border-radius: 30px;
+    padding: 0.4rem 0.9rem; font-size: 0.75rem;
+    color: var(--rose); cursor: pointer;
+    transition: all 0.3s ease; letter-spacing: 0.05em; display: none;
+  }
+  #music-indicator:hover { background: rgba(180,0,80,0.4); }
+
+  /* ===== ADMIN BUTTON ===== */
+  #admin-btn {
+    position: fixed; bottom: 1rem; right: 1rem;
+    z-index: 5000; width: 34px; height: 34px;
+    border-radius: 50%;
+    background: rgba(255,255,255,0.04);
+    border: 1px solid rgba(255,255,255,0.08);
+    cursor: pointer; display: flex;
+    align-items: center; justify-content: center;
+    font-size: 0.7rem; color: rgba(255,255,255,0.12);
+    transition: all 0.3s ease; user-select: none;
+  }
+  #admin-btn:hover {
+    background: rgba(255,255,255,0.09);
+    color: rgba(255,255,255,0.3);
+    border-color: rgba(255,255,255,0.18);
+  }
+
+  /* ===== ADMIN OVERLAY ===== */
+  #admin-overlay {
+    display: none; position: fixed; inset: 0; z-index: 6000;
+    background: rgba(0,0,0,0.88); backdrop-filter: blur(6px);
+    align-items: center; justify-content: center; padding: 1rem;
+  }
+  #admin-overlay.open { display: flex; }
+  .admin-modal {
+    background: #0f0018;
+    border: 1px solid rgba(212,168,83,0.3);
+    border-radius: 18px; padding: 2rem; width: 100%;
+    max-width: 560px; max-height: 88vh; overflow-y: auto;
+    box-shadow: 0 0 60px rgba(212,168,83,0.15); position: relative;
+  }
+  .admin-modal h3 {
+    font-family: 'Playfair Display', serif;
+    color: var(--gold); font-size: 1.4rem; margin-bottom: 0.3rem;
+  }
+  .admin-sub {
+    font-size: 0.78rem; color: rgba(255,255,255,0.35);
+    margin-bottom: 1.5rem; font-family: 'Lato', sans-serif;
+    letter-spacing: 0.04em;
+  }
+  .admin-close {
+    position: absolute; top: 1rem; right: 1rem;
+    background: none; border: none; color: rgba(255,255,255,0.3);
+    font-size: 1.2rem; cursor: pointer; transition: color 0.2s;
+  }
+  .admin-close:hover { color: #fff; }
+
+  /* login */
+  .admin-login input {
+    width: 100%; background: rgba(255,255,255,0.05);
+    border: 1px solid rgba(255,255,255,0.15); border-radius: 10px;
+    padding: 0.75rem 1rem; color: #fff;
+    font-family: 'Lato', sans-serif; font-size: 0.95rem;
+    margin-bottom: 0.8rem; outline: none; transition: border-color 0.2s;
+  }
+  .admin-login input:focus { border-color: var(--gold); }
+  .admin-login input::placeholder { color: rgba(255,255,255,0.25); }
+  .btn-admin-login {
+    width: 100%; background: linear-gradient(135deg, #d4a853, #a07820);
+    color: #000; border: none; border-radius: 10px; padding: 0.8rem;
+    font-family: 'Lato', sans-serif; font-size: 0.95rem;
+    font-weight: 700; cursor: pointer; letter-spacing: 0.06em;
+    transition: all 0.3s ease;
+  }
+  .btn-admin-login:hover { transform: translateY(-2px); box-shadow: 0 6px 25px rgba(212,168,83,0.4); }
+  .admin-err { color: #ff6b8a; font-size: 0.82rem; margin-top: 0.5rem; display: none; font-family: 'Lato', sans-serif; }
+
+  /* log */
+  .log-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem; gap: 0.5rem; flex-wrap: wrap; }
+  .log-count {
+    background: rgba(212,168,83,0.15); border: 1px solid rgba(212,168,83,0.3);
+    border-radius: 20px; padding: 0.2rem 0.75rem;
+    font-size: 0.78rem; color: var(--gold); font-family: 'Lato', sans-serif;
+  }
+  .firebase-badge {
+    background: rgba(255,160,0,0.1); border: 1px solid rgba(255,160,0,0.25);
+    border-radius: 20px; padding: 0.2rem 0.75rem;
+    font-size: 0.72rem; color: rgba(255,160,0,0.7); font-family: 'Lato', sans-serif;
+  }
+  .btn-clear-log {
+    background: rgba(255,50,80,0.15); border: 1px solid rgba(255,50,80,0.3);
+    color: rgba(255,100,120,0.8); border-radius: 20px;
+    padding: 0.2rem 0.75rem; font-size: 0.75rem; cursor: pointer;
+    font-family: 'Lato', sans-serif; transition: all 0.2s;
+  }
+  .btn-clear-log:hover { background: rgba(255,50,80,0.3); color: #fff; }
+  .log-empty {
+    text-align: center; color: rgba(255,255,255,0.25);
+    font-size: 0.88rem; padding: 2rem 0;
+    font-family: 'Cormorant Garamond', serif; font-style: italic;
+  }
+  .log-loading {
+    text-align: center; padding: 2rem 0;
+    color: rgba(212,168,83,0.5); font-size: 0.85rem;
+    font-family: 'Lato', sans-serif; letter-spacing: 0.05em;
+  }
+  .log-item {
+    background: rgba(255,255,255,0.04);
+    border: 1px solid rgba(255,255,255,0.07);
+    border-radius: 10px; padding: 0.7rem 1rem;
+    margin-bottom: 0.5rem; display: flex;
+    justify-content: space-between; align-items: flex-start; gap: 0.5rem;
+  }
+  .log-item:nth-child(odd) { background: rgba(212,168,83,0.04); }
+  .log-action { font-size: 0.88rem; color: rgba(255,220,230,0.85); font-family: 'Lato', sans-serif; flex: 1; }
+  .log-emoji  { font-size: 1rem; margin-right: 0.4rem; }
+  .log-time   { font-size: 0.72rem; color: rgba(255,255,255,0.3); white-space: nowrap; font-family: 'Lato', sans-serif; margin-top: 0.1rem; }
+  .admin-logout {
+    margin-top: 1.2rem; width: 100%; background: transparent;
+    border: 1px solid rgba(255,255,255,0.1); color: rgba(255,255,255,0.3);
+    border-radius: 10px; padding: 0.6rem;
+    font-family: 'Lato', sans-serif; font-size: 0.82rem;
+    cursor: pointer; transition: all 0.2s;
+  }
+  .admin-logout:hover { border-color: rgba(255,100,120,0.4); color: rgba(255,100,120,0.7); }
+  .sync-status {
+    display: flex; align-items: center; gap: 0.4rem;
+    font-size: 0.72rem; font-family: 'Lato', sans-serif;
+    color: rgba(255,255,255,0.25); margin-bottom: 0.8rem;
+  }
+  .sync-dot {
+    width: 7px; height: 7px; border-radius: 50%; background: #555;
+  }
+  .sync-dot.online  { background: #4caf50; box-shadow: 0 0 6px #4caf50; }
+  .sync-dot.syncing { background: var(--gold); animation: pulseDot 1s infinite; }
+  .sync-dot.error   { background: #ff4f7a; }
+</style>
+</head>
+<body>
+
+<div id="hearts-bg"></div>
+
+<div id="music-indicator" onclick="toggleMusic()">
+  <span style="display:inline-block;animation:noteFloat 1.2s ease-in-out infinite">♪</span>
+  <span id="music-label" style="margin-left:4px">Music</span>
+</div>
+
+<audio id="bg-music" loop>
+  <source src="https://cdn.pixabay.com/download/audio/2022/01/18/audio_d0cd41c00b.mp3?filename=beautiful-piano-141022.mp3" type="audio/mpeg">
+</audio>
+
+<!-- ===== MUSIC OVERLAY ===== -->
+<div id="music-overlay">
+  <div class="overlay-heart">💕</div>
+  <h2 style="font-family:'Playfair Display',serif;color:#fff;font-size:clamp(1.6rem,5vw,2.8rem);margin-bottom:0.5rem;">
+    Hey <span style="font-style:italic;color:#d4a853;">Eberechi</span>…
+  </h2>
+  <p style="font-family:'Cormorant Garamond',serif;font-style:italic;color:var(--rose);font-size:1.15rem;margin-bottom:0.6rem;opacity:0.85;">I made something just for you.</p>
+  <p style="font-family:'Cormorant Garamond',serif;font-style:italic;color:rgba(255,200,210,0.55);font-size:0.9rem;margin-bottom:1.8rem;">Tap below to begin — with music 🎵</p>
+  <button class="overlay-btn" onclick="startExperience()">
+    <span class="note-float">♪</span> Begin with Music
+  </button>
+</div>
+
+<!-- ===== SCREEN 1: LANDING ===== -->
+<div class="screen hidden" id="screen-landing">
+  <div class="glow-ring"></div>
+  <div class="screen-inner">
+    <div style="font-size:2.5rem;margin-bottom:1rem;animation:heartBeat 2s ease-in-out infinite">💕</div>
+    <h1>Hey beautiful…<br>I made something<br>just for you.</h1>
+    <div class="divider"></div>
+    <p class="subtitle">But you have to promise to click honestly.</p>
+    <button class="btn btn-primary" onclick="trackAndGo('Clicked "I Promise" on landing 🤞','🤞','screen-question')">👉 I Promise</button>
+  </div>
+</div>
+
+<!-- ===== SCREEN 2: QUESTION ===== -->
+<div class="screen hidden" id="screen-question">
+  <div class="screen-inner">
+    <p class="subtitle" style="font-size:1.4rem;margin-bottom:0.5rem">I have one important question…</p>
+    <div class="dots" id="question-dots">
+      <span class="dot"></span><span class="dot"></span><span class="dot"></span>
+    </div>
+    <div id="question-reveal" style="opacity:0;transition:opacity 1s ease">
+      <h1 style="font-size:clamp(2.2rem,7vw,4.5rem)">Will you be my<br><span class="name-highlight">Valentine</span>?</h1>
+      <div class="divider"></div>
+      <div class="btn-row" style="margin-top:1.5rem">
+        <button class="btn btn-yes" onclick="trackAndGo('Clicked ❤️ YES on main question','❤️','screen-yes')">❤️ YES</button>
+        <button class="btn btn-no" id="no-btn-1" onclick="trackAndGo('Clicked 😌 NO on main question','😅','screen-wait')">😌 NO</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ===== SCREEN 3: WAIT ===== -->
+<div class="screen hidden" id="screen-wait">
+  <div class="screen-inner">
+    <h1>Wait… are you sure? 🥺</h1>
+    <div class="divider"></div>
+    <p class="subtitle">Take a moment. Think about it.</p>
+    <div class="btn-row">
+      <button class="btn btn-yes" onclick="trackAndGo('Clicked "Okay fine YES" on wait screen','❤️','screen-yes')">❤️ Okay fine… YES</button>
+      <button class="btn btn-no" id="no-btn-2" onclick="trackAndGo('Clicked "Still No" on wait screen 😅','😅','screen-please')">😈 Still No</button>
+    </div>
+  </div>
+</div>
+
+<!-- ===== SCREEN 4: PLEASE ===== -->
+<div class="screen hidden" id="screen-please">
+  <div class="screen-inner">
+    <div style="font-size:3rem;margin-bottom:1rem">🥺💔</div>
+    <h1>Pleaseeeee?</h1>
+    <div class="divider"></div>
+    <p class="subtitle">I made this <em>whole entire</em> website for you.<br>Just for you, <span class="name-highlight">Eberechi</span>.</p>
+    <p class="body-text" style="font-size:1rem">Do you understand how long this took? The sleepless thinking? The butterflies? All of it — for you.</p>
+    <button class="btn btn-yes" onclick="trackAndGo('Clicked "Okay okay YES" on please screen','❤️','screen-yes')">❤️ Okay okay YES</button>
+  </div>
+</div>
+
+<!-- ===== SCREEN 5: YES ===== -->
+<div class="screen hidden" id="screen-yes">
+  <div class="screen-inner">
+    <div style="font-size:3.5rem;margin-bottom:1rem">🎉💕✨</div>
+    <h1>You just made me the<br>happiest person alive.</h1>
+    <div class="divider"></div>
+    <p class="subtitle">I knew you would. <span class="name-highlight">Eberechi</span>, you're everything. 🥰</p>
+    <button class="btn btn-primary" onclick="trackAndGo('Clicked Continue from YES screen','👉','screen-memory')" style="margin-top:0.5rem">👉 Continue</button>
+  </div>
+</div>
+
+<!-- ===== SCREEN 6: MEMORY ===== -->
+<div class="screen hidden" id="screen-memory">
+  <div class="screen-inner">
+    <div style="font-size:1.8rem;margin-bottom:0.5rem">🌹</div>
+    <h2>Why It Had To Be You</h2>
+    <div class="divider"></div>
+    <p class="body-text">Out of everyone in this world, it was you who walked into my life and changed everything. You didn't just become someone I love… you became my safe place, my happiness, my peace. The way you smile, the way you talk, even the little things you don't notice about yourself — they mean everything to me.</p>
+    <p class="body-text" style="font-size:1rem;color:rgba(255,200,210,0.7)">And your name — <span class="name-highlight" style="font-size:1.15rem">Eberechi</span> — sounds like a song I never want to stop hearing.</p>
+    <button class="btn btn-secondary" onclick="trackAndGo('Clicked "There\'s More" from memory screen','👉','screen-hearts')">👉 There's More</button>
+  </div>
+</div>
+
+<!-- ===== SCREEN 7: HEARTS ===== -->
+<div class="screen hidden" id="screen-hearts">
+  <div class="screen-inner">
+    <h2>Click the Hearts 💖</h2>
+    <p class="subtitle">Each one holds a secret…</p>
+    <div class="hearts-grid" id="hearts-grid"></div>
+    <div id="continue-hearts" style="margin-top:1.5rem;opacity:0;transition:opacity 1s ease;pointer-events:none">
+      <p class="subtitle" style="margin-bottom:1rem">You opened them all. Just like you opened my heart. 💕</p>
+      <button class="btn btn-primary" onclick="trackAndGo('Clicked Continue after all hearts opened','✨','screen-final')">✨ One Last Thing</button>
+    </div>
+  </div>
+</div>
+
+<!-- ===== SCREEN 8: FINAL ===== -->
+<div class="screen hidden" id="screen-final">
+  <div class="screen-inner" style="padding:1rem 0">
+    <div style="font-size:1.5rem;margin-bottom:0.5rem">✨🌙✨</div>
+    <div class="typewriter-text" id="typewriter-el"></div>
+    <span class="cursor" id="cursor-el"></span>
+    <div id="final-content" style="opacity:0;transition:opacity 1.5s ease;margin-top:2rem">
+      <div class="divider"></div>
+      <p class="final-big">Forever starts with you 😔💕</p>
+      <div class="divider"></div>
+      <div class="video-container">
+        <video controls playsinline>
+          <source src="https://image2url.com/r2/default/videos/1771081208755-0b99911d-cb48-4f70-b922-011bea37692e.mp4" type="video/mp4">
+        </video>
+      </div>
+      <p class="subtitle" style="margin-top:1rem;font-size:0.98rem;max-width:480px;margin-inline:auto;color:rgba(255,200,220,0.75)">Every second of this video, every beat, every quiet moment — it all reminds me of you. Of us. Of everything I want to be for you.</p>
+      <p class="subtitle" style="margin-top:0.5rem;color:var(--gold);font-size:1.1rem">I love you, <span class="name-highlight" style="font-size:1.3rem">Eberechi</span>. 💕</p>
+    </div>
+  </div>
+</div>
+
+<!-- ===== ADMIN BUTTON (bottom-right, subtle) ===== -->
+<div id="admin-btn" onclick="openAdmin()" title="Admin">⚙</div>
+
+<!-- ===== ADMIN OVERLAY ===== -->
+<div id="admin-overlay">
+  <div class="admin-modal">
+    <button class="admin-close" onclick="closeAdmin()">✕</button>
+
+    <!-- LOGIN -->
+    <div id="admin-login-panel">
+      <h3>Admin Access</h3>
+      <p class="admin-sub">ƬƛƔƖƘ / Godswill only 🔒</p>
+      <div class="admin-login">
+        <input type="password" id="admin-password-input" placeholder="Enter password…"
+               onkeydown="if(event.key==='Enter') checkAdminLogin()">
+        <button class="btn-admin-login" onclick="checkAdminLogin()">Unlock Panel</button>
+        <p class="admin-err" id="admin-err">Wrong password. Try again.</p>
+      </div>
+    </div>
+
+    <!-- LOG PANEL -->
+    <div id="admin-log-panel" style="display:none">
+      <h3>Activity Log 📊</h3>
+      <p class="admin-sub">Live from Firebase — works on every device 🔥</p>
+      <div class="sync-status">
+        <span class="sync-dot" id="sync-dot"></span>
+        <span id="sync-label">Connecting…</span>
+      </div>
+      <div class="log-header">
+        <span class="log-count" id="log-count">— actions</span>
+        <span class="firebase-badge">🔥 Firebase Live</span>
+        <button class="btn-clear-log" onclick="clearLog()">Clear All</button>
+      </div>
+      <div id="log-list"><div class="log-loading">Loading from Firebase…</div></div>
+      <button class="admin-logout" onclick="logoutAdmin()">🔒 Lock Panel</button>
+    </div>
+  </div>
+</div>
+
+<!-- Firebase SDK -->
+<script type="module">
+  import { initializeApp }         from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js';
+  import { getDatabase, ref, push, onValue, remove, get }
+    from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js';
+
+  // ===== FIREBASE INIT =====
+  const firebaseConfig = {
+    apiKey:            "AIzaSyBzUELxbbaL6Wb_M1uNhjwlZHVTorN9XJs",
+    authDomain:        "my-whatsapp-2c1af.firebaseapp.com",
+    databaseURL:       "https://my-whatsapp-2c1af-default-rtdb.firebaseio.com",
+    projectId:         "my-whatsapp-2c1af",
+    storageBucket:     "my-whatsapp-2c1af.firebasestorage.app",
+    messagingSenderId: "1089455460888",
+    appId:             "1:1089455460888:web:15bd0820546c813febe96d"
+  };
+
+  const app = initializeApp(firebaseConfig);
+  const db  = getDatabase(app);
+  const logsRef = ref(db, 'valentine_logs');
+
+  // Expose to global scope so non-module functions can use them
+  window._fbPushLog = async (action, emoji) => {
+    try {
+      setSyncStatus('syncing');
+      await push(logsRef, {
+        action,
+        emoji,
+        time: new Date().toISOString(),
+        device: navigator.userAgent.includes('Mobile') ? '📱 Mobile' : '💻 Desktop'
+      });
+      setSyncStatus('online');
+    } catch (e) {
+      console.error('Firebase write error:', e);
+      setSyncStatus('error');
+    }
+  };
+
+  window._fbListenLogs = () => {
+    onValue(logsRef, (snapshot) => {
+      const data = snapshot.val();
+      setSyncStatus('online');
+      renderLogData(data);
+    }, (err) => {
+      console.error('Firebase read error:', err);
+      setSyncStatus('error');
+      document.getElementById('log-list').innerHTML =
+        '<p class="log-empty">⚠️ Firebase connection error. Check database rules.</p>';
+    });
+  };
+
+  window._fbClearLogs = async () => {
+    try {
+      await remove(logsRef);
+    } catch(e) { console.error(e); }
+  };
+
+  function setSyncStatus(state) {
+    const dot   = document.getElementById('sync-dot');
+    const label = document.getElementById('sync-label');
+    if (!dot) return;
+    dot.className = 'sync-dot ' + state;
+    label.textContent = state === 'online'  ? 'Live — synced across all devices' :
+                        state === 'syncing' ? 'Saving to Firebase…' :
+                        state === 'error'   ? 'Connection error' : 'Connecting…';
+  }
+
+  function renderLogData(data) {
+    const list  = document.getElementById('log-list');
+    const count = document.getElementById('log-count');
+    if (!list) return;
+
+    if (!data) {
+      count.textContent = '0 actions';
+      list.innerHTML = '<p class="log-empty">No activity yet — she hasn\'t opened it yet 🌹</p>';
+      return;
+    }
+
+    // Convert object to array, newest first
+    const entries = Object.entries(data)
+      .map(([key, val]) => ({ key, ...val }))
+      .sort((a, b) => new Date(b.time) - new Date(a.time));
+
+    count.textContent = entries.length + (entries.length === 1 ? ' action' : ' actions');
+
+    list.innerHTML = entries.map(e => {
+      const d = new Date(e.time);
+      const formatted = d.toLocaleString('en-GB', {
+        day:'2-digit', month:'short', year:'numeric',
+        hour:'2-digit', minute:'2-digit', second:'2-digit'
+      });
+      return `
+        <div class="log-item">
+          <div class="log-action">
+            <span class="log-emoji">${e.emoji || '💕'}</span>${e.action}
+            <div style="font-size:0.7rem;color:rgba(255,255,255,0.2);margin-top:2px">${e.device || ''}</div>
+          </div>
+          <div class="log-time">${formatted}</div>
+        </div>`;
+    }).join('');
+  }
+
+  // Make renderLogData available for polling fallback
+  window._renderLogData = renderLogData;
+</script>
+
+<script>
+  // ===== FLOATING HEARTS =====
+  const heartsBg = document.getElementById('hearts-bg');
+  const hEmojis  = ['💕','❤️','🌹','💗','💖','💝','✨','🌸'];
+  function spawnBgHeart() {
+    const el = document.createElement('span');
+    el.className = 'bg-heart';
+    el.textContent = hEmojis[Math.floor(Math.random() * hEmojis.length)];
+    el.style.left = Math.random() * 100 + 'vw';
+    el.style.fontSize = (0.8 + Math.random() * 1.2) + 'rem';
+    const dur = 7 + Math.random() * 8;
+    el.style.animationDuration = dur + 's';
+    el.style.animationDelay = Math.random() * 2 + 's';
+    heartsBg.appendChild(el);
+    setTimeout(() => el.remove(), (dur + 2) * 1000);
+  }
+  setInterval(spawnBgHeart, 900);
+
+  // ===== TRACK + NAVIGATE =====
+  function trackAndGo(action, emoji, screen) {
+    if (window._fbPushLog) window._fbPushLog(action, emoji);
+    goTo(screen);
+  }
+
+  // ===== MUSIC =====
+  let musicPlaying = false;
+  const audio = document.getElementById('bg-music');
+  audio.volume = 0.32;
+
+  function startExperience() {
+    const overlay = document.getElementById('music-overlay');
+    audio.play().then(() => {
+      musicPlaying = true;
+      document.getElementById('music-indicator').style.display = 'flex';
+    }).catch(() => {});
+    overlay.classList.add('fade-out');
+    setTimeout(() => {
+      overlay.style.display = 'none';
+      goTo('screen-landing');
+      if (window._fbPushLog) window._fbPushLog('Opened the website for the first time 🌹', '🌹');
+    }, 850);
+  }
+
+  function toggleMusic() {
+    if (musicPlaying) {
+      audio.pause(); musicPlaying = false;
+      document.getElementById('music-label').textContent = 'Paused';
+    } else {
+      audio.play(); musicPlaying = true;
+      document.getElementById('music-label').textContent = 'Music ♪';
+    }
+  }
+
+  // ===== SCREEN TRANSITIONS =====
+  function goTo(id) {
+    document.querySelectorAll('.screen').forEach(s => {
+      s.classList.remove('active');
+      setTimeout(() => { if (!s.classList.contains('active')) s.classList.add('hidden'); }, 800);
+    });
+    const next = document.getElementById(id);
+    next.classList.remove('hidden');
+    setTimeout(() => next.classList.add('active'), 50);
+
+    if (id === 'screen-question') triggerQuestionReveal();
+    if (id === 'screen-yes')      triggerConfetti();
+    if (id === 'screen-hearts')   buildHearts();
+    if (id === 'screen-final')    triggerTypewriter();
+  }
+
+  // ===== QUESTION REVEAL =====
+  function triggerQuestionReveal() {
+    const dots   = document.getElementById('question-dots');
+    const reveal = document.getElementById('question-reveal');
+    dots.style.display = 'flex';
+    reveal.style.opacity = '0';
+    setTimeout(() => { dots.style.display = 'none'; reveal.style.opacity = '1'; }, 3000);
+  }
+
+  // ===== NO BUTTON WIGGLE =====
+  ['no-btn-1','no-btn-2'].forEach(id => {
+    const btn = document.getElementById(id);
+    if (!btn) return;
+    btn.addEventListener('mouseenter', () => {
+      const rx = (Math.random() - 0.5) * 140;
+      const ry = (Math.random() - 0.5) * 100;
+      btn.style.transform = `translate(${rx}px, ${ry}px)`;
+    });
+    btn.addEventListener('mouseleave', () => { btn.style.transform = ''; });
+  });
+
+  // ===== CONFETTI =====
+  function triggerConfetti() {
+    const colors = ['#ff4f7a','#ff9eb5','#ffd6e0','#ffc300','#ff6b6b','#c77dff','#fff','#ffb3c6'];
+    for (let i = 0; i < 130; i++) {
+      setTimeout(() => {
+        const el = document.createElement('div');
+        el.className = 'confetti-piece';
+        el.style.left = Math.random() * 100 + 'vw';
+        el.style.top  = '-15px';
+        el.style.width  = (6 + Math.random() * 10) + 'px';
+        el.style.height = (6 + Math.random() * 10) + 'px';
+        el.style.background = colors[Math.floor(Math.random() * colors.length)];
+        el.style.borderRadius = Math.random() > 0.5 ? '50%' : '2px';
+        el.style.animationDuration = (2.5 + Math.random() * 3) + 's';
+        el.style.animationDelay   = Math.random() * 1.5 + 's';
+        document.body.appendChild(el);
+        setTimeout(() => el.remove(), 6500);
+      }, i * 16);
+    }
+  }
+
+  // ===== HEARTS GRID =====
+  const heartMessages = [
+    "I love how your smile fixes my worst days.",
+    "I love how you care so deeply.",
+    "I love the way you make ordinary moments feel special.",
+    "I love your voice.",
+    "I love your chaos.",
+    "I love that you're mine.",
+    "I love how you don't even know how beautiful you are.",
+    "I love the way you make me feel seen.",
+  ];
+  let openedCount = 0;
+
+  function buildHearts() {
+    const grid = document.getElementById('hearts-grid');
+    grid.innerHTML = '';
+    openedCount = 0;
+    const cont = document.getElementById('continue-hearts');
+    cont.style.opacity = '0'; cont.style.pointerEvents = 'none';
+
+    heartMessages.forEach((msg, i) => {
+      const item = document.createElement('div');
+      item.className   = 'heart-item';
+      item.dataset.opened = 'false';
+      item.innerHTML = `<span class="heart-icon">🤍</span><div class="heart-msg">${msg}</div>`;
+      item.addEventListener('click', () => {
+        if (item.dataset.opened === 'true') return;
+        item.dataset.opened = 'true';
+        item.classList.add('opened','done');
+        item.querySelector('.heart-icon').textContent = '❤️';
+        if (window._fbPushLog) window._fbPushLog(`Opened heart #${i+1}: "${msg}"`, '💖');
+        openedCount++;
+        setTimeout(() => item.classList.remove('opened'), 2500);
+        if (openedCount === heartMessages.length) {
+          cont.style.opacity = '1'; cont.style.pointerEvents = 'all';
+        }
+      });
+      grid.appendChild(item);
+    });
+  }
+
+  // ===== TYPEWRITER =====
+  const finalText = `Loving you isn't just something I do.
+It's something I feel in every heartbeat.
+
+I don't just want today with you.
+I want the random Tuesdays, the late-night talks,
+the boring days, the exciting days —
+all of it.
+
+If I had to choose again in every lifetime…
+I'd still choose you.
+
+Every single time.`;
+
+  function triggerTypewriter() {
+    const el     = document.getElementById('typewriter-el');
+    const cursor = document.getElementById('cursor-el');
+    const final  = document.getElementById('final-content');
+    el.textContent = ''; cursor.style.display = 'inline-block';
+    final.style.opacity = '0';
+    let i = 0;
+    if (window._fbPushLog) window._fbPushLog('Reached the final romantic message ✨', '✨');
+    function type() {
+      if (i < finalText.length) { el.textContent += finalText[i++]; setTimeout(type, 38); }
+      else { cursor.style.display = 'none'; setTimeout(() => final.style.opacity = '1', 900); }
+    }
+    setTimeout(type, 600);
+  }
+
+  // ===== ADMIN PANEL =====
+  const ADMIN_PASS   = 'ihechigodswill575@gmail.com';
+  let adminUnlocked  = false;
+  let listenerActive = false;
+
+  function openAdmin() {
+    document.getElementById('admin-overlay').classList.add('open');
+    adminUnlocked ? showLogPanel() : showLoginPanel();
+  }
+  function closeAdmin() {
+    document.getElementById('admin-overlay').classList.remove('open');
+    document.getElementById('admin-password-input').value = '';
+    document.getElementById('admin-err').style.display = 'none';
+  }
+  function showLoginPanel() {
+    document.getElementById('admin-login-panel').style.display = 'block';
+    document.getElementById('admin-log-panel').style.display   = 'none';
+    setTimeout(() => document.getElementById('admin-password-input').focus(), 200);
+  }
+  function showLogPanel() {
+    document.getElementById('admin-login-panel').style.display = 'none';
+    document.getElementById('admin-log-panel').style.display   = 'block';
+    // Start real-time listener only once
+    if (!listenerActive && window._fbListenLogs) {
+      listenerActive = true;
+      window._fbListenLogs();
+    }
+  }
+  function checkAdminLogin() {
+    const val = document.getElementById('admin-password-input').value.trim();
+    const err = document.getElementById('admin-err');
+    if (val === ADMIN_PASS) {
+      adminUnlocked = true;
+      err.style.display = 'none';
+      showLogPanel();
+    } else {
+      err.style.display = 'block';
+      document.getElementById('admin-password-input').value = '';
+      document.getElementById('admin-password-input').focus();
+    }
+  }
+  function logoutAdmin() { adminUnlocked = false; showLoginPanel(); }
+  function clearLog() {
+    if (confirm('Delete ALL activity logs from Firebase?')) {
+      if (window._fbClearLogs) window._fbClearLogs();
+    }
+  }
+
+  // Close on backdrop click
+  document.getElementById('admin-overlay').addEventListener('click', function(e) {
+    if (e.target === this) closeAdmin();
+  });
+</script>
+</body>
+</html>
